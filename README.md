@@ -1,84 +1,109 @@
-# Document Lens — Free-Tier Gemini RAG Chatbot
+# Document Lens
 
-**A small PDF Q&A portfolio project for an AI Engineer interview.** It lets you upload a PDF, generate embeddings, search relevant passages by vector similarity, and ask Gemini to answer with page citations.
+I built Document Lens to make it easier to work through research papers and other long PDFs. Instead of constantly searching through a document to find a detail, I can upload it, ask a question, and see an answer alongside the relevant passages and page numbers.
 
+The app uses retrieval-augmented generation (RAG): it searches the document for relevant text before sending that context to Gemini to generate an answer.
 
-## Demo Screenshot
+![Document Lens application](screenshots/demo.png)
 
-![Document Lens RAG Chatbot](screenshots/demo.png)
+## Features
 
+- Upload a text-based PDF and ask questions in a chat interface.
+- Retrieve relevant sections using semantic similarity rather than keyword matching alone.
+- Display the passages used for each answer, including their page numbers and similarity scores.
+- Keep the extracted document index in memory for follow-up questions during the session.
+- Respond when the supplied passages don't contain the requested information.
 
-## Cost and subscription note
+## Built with
 
-- **Gemini API Free tier:** Google AI Studio offers limited free access to select Gemini models and embedding models. Free-tier access, quotas and availability vary by project, account, region and model; consult the AI Studio quota dashboard.
-- **Google AI Pro:** A consumer subscription is **not** a prepaid Gemini API allowance. You can still obtain a separate Free-tier API key even without Pro, subject to eligibility and limits.
-- **No need to enable billing** to try the Free-tier API. Do not attach a billing account to the project if you want to avoid API charges.
-- **Privacy:** Free-tier content may be used by Google to improve its products. Use fictional/demo PDFs only.
+- **Python** for document processing and retrieval
+- **Streamlit** for the interface
+- **pypdf** for PDF text extraction
+- **Gemini Embedding** (`gemini-embedding-001`) for document and query embeddings
+- **NumPy** for cosine-similarity search
+- **Gemini 3.5 Flash-Lite** (`gemini-3.5-flash-lite`) for generating answers
 
-Official reference: https://ai.google.dev/gemini-api/docs/pricing
+## How it works
 
-## 1. Get a free API key
+1. **Extract:** Read selectable text from the uploaded PDF and preserve its page numbers.
+2. **Chunk:** Split each page into overlapping text chunks (140 words per chunk, with 25 words of overlap).
+3. **Embed:** Create 768-dimensional embeddings for the chunks using Gemini's document-retrieval embedding mode.
+4. **Retrieve:** Embed the question, compare it with stored vectors using cosine similarity, and select the three most relevant chunks.
+5. **Answer:** Send the question and retrieved passages to Gemini with instructions to use only that context and include page references.
 
-1. Visit **https://aistudio.google.com/api-keys** and sign in.
-2. Create/copy an API key in a **Free-tier project**, if your account is eligible.
-3. Do not enable paid API billing.
-4. If a model isn't available, see **https://aistudio.google.com/rate-limit** or use another free-supported model listed in your account.
+For now, embeddings are stored in memory rather than in a separate vector database. This keeps the implementation straightforward, although it means the document needs to be processed again after the session resets.
 
-## 2. Run on Mac
+## Getting started
 
-You need Python 3.10+ (Python 3.11/3.12 recommended).
+**Requirements:** Python 3.10+ and a Gemini API key from [Google AI Studio](https://aistudio.google.com/api-keys). Model access and free-tier limits depend on your Google AI Studio project. Google AI Pro is separate from Gemini API usage.
+
+Clone the repository:
 
 ```bash
-cd rag-pdf-chatbot-gemini
+git clone https://github.com/razaraees10/document-lens-rag.git
+cd document-lens-rag
+```
+
+Create and activate a virtual environment:
+
+```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+```
+
+Install the dependencies:
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+Copy the example environment file:
+
+```bash
 cp .env.example .env
 ```
 
-Open `.env` in your preferred editor and replace `paste-your-google-ai-studio-key-here` with your key. Do not publish it.
+Add your own Gemini API key to `.env`:
 
-```bash
-streamlit run app.py
+```dotenv
+GEMINI_API_KEY=your_api_key_here
 ```
 
-Windows: activate with `.venv\Scripts\activate` and copy the file using `copy .env.example .env`.
+Start the app:
 
-## 3. Demo
+```bash
+python -m streamlit run app.py
+```
 
-Upload the included `sample_document.pdf`, click **Process PDF**, and try:
+On Windows, use `.venv\Scripts\activate` to activate the environment and `copy .env.example .env` to create the environment file.
 
-- **When does the robotics club meet?** (Tuesday, 4 PM)
-- **What is the annual membership fee?** (PKR 1,200)
-- **What sensor is used for obstacle detection?** (HC-SR04)
-- **Who founded the robotics club?** (not supplied; should refuse to invent it)
+## Trying it out
 
-The app reveals which PDF chunks were used and shows cosine similarity scores.
+The repository includes `sample_document.pdf` for a quick test. Upload it, select **Process PDF**, and try asking:
 
-## 4. The RAG pipeline (know this for the interview)
+- When does the robotics club meet?
+- What is the annual membership fee?
+- What sensor is used for obstacle detection?
+- Who founded the robotics club?
 
-1. `pypdf` extracts page text, retaining page numbers.
-2. We split each page into overlapping ~140-word chunks (25-word overlap).
-3. The Gemini `gemini-embedding-001` model converts chunks into 768-dimensional vectors (`RETRIEVAL_DOCUMENT` task type).
-4. The vectors are held **in memory** in NumPy arrays; this small demo has no persistent vector database.
-5. Each question gets a compatible vector (`RETRIEVAL_QUERY` task type).
-6. Cosine similarity ranks all stored chunks; the top 3 passages are retrieved.
-7. `gemini-3.5-flash-lite` generates an answer *only from the retrieved context*, with page references.
-
-**Why not just send the entire PDF to Gemini?** RAG first finds relevant passages, sends less context for each question, shows supporting evidence, and gives a foundation for retrieval over larger document collections.
-
-**What would you improve in production?** Persistent Chroma/pgvector; hybrid retrieval and reranking; better chunking; OCR; per-user access control; prompt-injection defenses; retrieval/answer evaluation; quota monitoring.
-
-**Limitations:** The model can still hallucinate or cite weak evidence, especially for questions not in the PDF. Similarity scores are not answer confidence. PDF must contain selectable text. 80-chunk cap is intentional for a fast demo. Embeddings are recomputed if the Streamlit session resets.
+The last question is intentionally not answered in the sample document. It helps check whether the assistant acknowledges missing information rather than inventing it.
 
 ## Tests
+
+Run the unit tests with:
 
 ```bash
 python -m unittest discover -s tests -v
 ```
 
-The tests use fake API responses and run without a Gemini API key. The live API path needs an actual free-tier API key and network access to verify.
+The tests use mock API responses and don't require a Gemini API key.
 
-## 30-second interview pitch
+## Current limitations
 
-> “I built a RAG-based PDF assistant using Python, Streamlit, and Gemini. I extract and chunk documents, embed the chunks and user question with task-optimized embedding modes, and use cosine similarity to retrieve the top evidence. I then ask Gemini to answer from those passages and cite pages. I kept retrieval logic explicit instead of hiding it behind LangChain so I could explain and test the entire pipeline.”
+- Only PDFs with extractable text are supported; scanned pages need OCR.
+- The app processes one PDF at a time, with a 10 MB upload limit and a maximum of 80 chunks.
+- Embeddings aren't saved between sessions.
+- Answers can still contain mistakes, and retrieved passages aren't a guarantee of correctness.
+- Gemini API requests are subject to model availability and project quotas. Avoid submitting sensitive documents unless you've reviewed the API's data-handling terms.
+
+I'd like to extend this with saved document collections, support for multiple papers, and better handling of tables and scanned pages.
